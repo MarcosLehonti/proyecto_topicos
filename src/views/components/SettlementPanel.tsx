@@ -1,4 +1,4 @@
-import type { Expense, Participant, PaymentRecord } from '../../models';
+import type { Expense, Participant, PaymentRecord, ExchangeRates } from '../../models';
 import { calculateDebts, formatAmount } from '../../services/calculations';
 import { Card } from './Card';
 
@@ -6,6 +6,7 @@ interface Props {
   expenses: Expense[];
   participants: Participant[];
   payments: PaymentRecord[];
+  exchangeRates: ExchangeRates;
   onMarkPaid: (from: string, to: string, amountCents: number) => void;
   onUnmarkPaid: (from: string, to: string, amountCents: number) => void;
 }
@@ -24,6 +25,7 @@ export function SettlementPanel({
   expenses,
   participants,
   payments,
+  exchangeRates,
   onMarkPaid,
   onUnmarkPaid,
 }: Props) {
@@ -61,7 +63,7 @@ export function SettlementPanel({
 
   // ── Cálculo de deudas y estado de pagos ───────────────────────────────────
   // Las deudas pendientes se calculan descontando los pagos ya realizados
-  const pendingDebts = calculateDebts(expenses, participants, payments);
+  const pendingDebts = calculateDebts(expenses, participants, exchangeRates, payments);
   
   const getParticipantName = (id: string) =>
     participants.find((p) => p.id === id)?.name ?? 'Desconocido';
@@ -147,7 +149,7 @@ export function SettlementPanel({
           isPaid ? 'text-white/30 line-through' : 'text-white'
         }`}
       >
-        Bs. {formatAmount(cents / 100)}
+        $ {formatAmount(cents / 100)}
       </span>
 
       {isPaid ? (
@@ -215,7 +217,7 @@ export function SettlementPanel({
           <div className="border-t border-white/10 pt-4 mb-8">
             <div className="flex items-center justify-between text-sm">
               <span className="text-white/40">Pendiente a transferir</span>
-              <span className="text-white font-bold text-indigo-300">Bs. {formatAmount(pendingCents / 100)}</span>
+              <span className="text-white font-bold text-indigo-300">$ {formatAmount(pendingCents / 100)}</span>
             </div>
           </div>
         </>
@@ -244,7 +246,7 @@ export function SettlementPanel({
           <div className="border-t border-white/10 pt-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-white/40">Total liquidado</span>
-              <span className="text-white font-bold text-emerald-400">Bs. {formatAmount(paidCents / 100)}</span>
+              <span className="text-white font-bold text-emerald-400">$ {formatAmount(paidCents / 100)}</span>
             </div>
           </div>
         </>

@@ -163,6 +163,7 @@ export default function App() {
               expenses={state.expenses}
               participants={state.participants}
               payments={state.payments}
+              exchangeRates={state.exchangeRates}
             />
           </div>
         )}
@@ -174,6 +175,7 @@ export default function App() {
               expenses={state.expenses}
               participants={state.participants}
               payments={state.payments}
+              exchangeRates={state.exchangeRates}
               onMarkPaid={markTransferPaid}
               onUnmarkPaid={unmarkTransferPaid}
             />

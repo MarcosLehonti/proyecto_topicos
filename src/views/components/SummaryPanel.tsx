@@ -1,4 +1,5 @@
-import type { Expense, Participant, PaymentRecord } from '../../models';
+import type { Expense, Participant, PaymentRecord, ExchangeRates } from '../../models';
+import { toUsdCents } from '../../services/currency';
 import {
   calculateDetailedBalances,
   formatAmount,
@@ -9,6 +10,7 @@ interface Props {
   expenses: Expense[];
   participants: Participant[];
   payments: PaymentRecord[];
+  exchangeRates: ExchangeRates;
 }
 
 /**
@@ -23,7 +25,7 @@ interface Props {
  * El "balance ajustado" es el saldo real una vez descontadas las transferencias
  * de liquidación ya realizadas. Cuando es 0 → a mano real.
  */
-export function SummaryPanel({ expenses, participants, payments }: Props) {
+export function SummaryPanel({ expenses, participants, payments, exchangeRates }: Props) {
   if (participants.length === 0) {
     return (
       <Card title="📊 Saldos">
@@ -55,10 +57,14 @@ export function SummaryPanel({ expenses, participants, payments }: Props) {
   }
 
   // Calcular detalle incluyendo los pagos de liquidación ya realizados
-  const detailed = calculateDetailedBalances(expenses, participants, payments);
+  const detailed = calculateDetailedBalances(expenses, participants, exchangeRates, payments);
   const hasPayments = payments.length > 0;
 
-  const totalSpent = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalSpentCents = expenses.reduce(
+    (sum, e) => sum + toUsdCents(e.amount, e.currency, exchangeRates),
+    0
+  );
+  const totalSpent = totalSpentCents / 100;
 
   // Suma de todos los balances ajustados: siempre es 0
   const adjustedSum = [...detailed.values()].reduce(
@@ -72,7 +78,7 @@ export function SummaryPanel({ expenses, participants, payments }: Props) {
       {/* ── Total gastado ── */}
       <div className="bg-indigo-500/20 border border-indigo-500/30 rounded-xl p-4 mb-5 text-center">
         <div className="text-white/60 text-xs uppercase tracking-wide mb-1">Total gastado</div>
-        <div className="text-white text-2xl font-bold">Bs. {formatAmount(totalSpent)}</div>
+        <div className="text-white text-2xl font-bold">$ {formatAmount(totalSpent)}</div>
       </div>
 
       {/* ── Aviso cuando hay pagos de liquidación ── */}
@@ -203,7 +209,7 @@ export function SummaryPanel({ expenses, participants, payments }: Props) {
               Math.abs(adjustedSum) < 0.01 ? 'text-emerald-400' : 'text-yellow-400'
             }`}
           >
-            {Math.abs(adjustedSum) < 0.01 ? 'Bs. 0.00' : `Bs. ${formatAmount(adjustedSum)}`}
+            {Math.abs(adjustedSum) < 0.01 ? '$ 0.00' : `$ ${formatAmount(adjustedSum)}`}
           </span>
         </div>
       </div>

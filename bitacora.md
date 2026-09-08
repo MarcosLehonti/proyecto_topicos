@@ -1352,3 +1352,99 @@ El entorno del agente no pudo lanzar procesos de shell (`spawn UNKNOWN`) ni auto
 ### Correcciones realizadas
 
 Ninguna sobre el código: no hubo un fallo de implementación que hubiera que revertir.
+
+---
+
+## Iteración 16 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y plan-alumnos-multimoneda.md (secciones 2 y 3, sobre todo 3.2, 3.3 y 3.4). Revisa lo que implementó el Alumno 1: Currency, Expense.currency, ExchangeRates, currency.ts, selector de moneda y tasas.
+>
+> Eres el Alumno 2. Implementa SOLO esta parte. No rediseñes la pantalla de Liquidación (eso es Alumno 3). No pidas ni guardes la moneda en la que se marca un pago (eso es Alumno 4).
+>
+> Objetivo de esta iteración:
+> Todos los saldos se calculan internamente en centavos de USD y se muestran en dólares americanos. Si un gasto no se puede dividir en centavos exactos, el excedente lo absorbe quien pagó.
+>
+> Requisitos:
+>
+> 1. Completa src/services/currency.ts (o el archivo de conversión que haya dejado el Alumno 1):
+>    - toUsdCents(amount, currency, rates): number
+>    - fromUsdCents(usdCents, targetCurrency, rates): number  (para mostrar equivalentes; Alumno 3 lo usará, decláralo ya)
+>    - Usar Math.round y aritmética en enteros. Nada de sumar floats en un bucle.
+>
+> 2. Reescribe la distribución en src/services/calculations.ts:
+>    - Elimina el método del resto mayor que daba el centavo extra a los primeros índices.
+>    - Nueva función, por ejemplo distributeSharesForPayer(usdCents, participantIds, paidBy):
+>      * base = floor(usdCents / n)
+>      * remainder = usdCents % n
+>      * cada id en participantIds recibe base
+>      * remainder se suma SIEMPRE a paidBy (esté o no en participantIds)
+>      * la suma de partes (incluyendo remainder del pagador) === usdCents
+>    - calculateBalances, calculateDetailedBalances y calculateDebts deben:
+>      * recibir también exchangeRates
+>      * convertir CADA gasto a USD con toUsdCents ANTES de repartir
+>      * operar solo en centavos USD
+>      * devolver montos en USD (no en Bs.)
+>    - ParticipantBalance sigue significando lo mismo (totalPaid, totalOwed, balance, settledOut, settledIn, adjustedBalance) pero ahora esas cifras están en USD.
+>    - Los PaymentRecord.amountCents existentes pasan a interpretarse como centavos USD a partir de ahora. Documenta eso en un comentario breve. No migres datos viejos con una fórmula mágica: es un proyecto académico de iteraciones.
+>
+> 3. Actualiza las firmas y todos los call sites (SummaryPanel, SettlementPanel si ya llama a calculateDebts, tests locales). Pasa state.exchangeRates.
+>
+> 4. SummaryPanel (pestaña Saldos):
+>    - Total gastado en USD (suma de gastos convertidos, no suma de montos originales)
+>    - Columnas Pagó / Corresponde / Balance en USD, con símbolo $
+>    - Si hay pagos de liquidación, la columna Liquidó y el balance ajustado también en USD
+>    - La suma de balances debe ser $ 0.00 (0 centavos)
+>    - Leyenda igual: + le deben, − debe, 0 a mano
+>    - No muestres Bs. como unidad principal de esta pestaña
+>
+> 5. Pruebas obligatorias con node o un pequeño script temporal (puedes borrarlo después, o dejarlo fuera del commit si es ruido). Casos:
+>    - $10.00 USD / 3 personas, paga Ana y Ana comparte → 3.34, 3.33, 3.33 (Ana absorbe 1 centavo)
+>    - $1.00 USD / 3 → 0.34, 0.33, 0.33 para el pagador y los otros
+>    - Bs. 69.60 con tasa 6.96 → equivale a $10.00 USD, luego se divide según la regla
+>    - Un gasto USDT con usdToUsdt = 1 se comporta como USD
+>    - Mezclar un gasto en BOB y uno en USD: el saldo unificado está en USD y Σ balances = 0
+>    - Pagador que NO comparte: los demás reciben solo base; el pagador absorbe remainder; Σ = 0
+>
+> 6. Compila con tsc --noEmit. Verifica en la pestaña Saldos con datos reales de la UI.
+>
+> 7. Registra Iteración 16 en bitacora.md con el prompt textual, cambios reales, resultado y problemas solo si ocurrieron. No borres entradas anteriores.
+>
+> No implementes el desglose USDT/BOB de la liquidación ni el selector de moneda al pagar.
+
+### Cambios realizados
+
+**`src/services/calculations.ts`**
+- Se eliminó el helper `toCents` y `distributeShares`.
+- Se creó `distributeSharesForPayer(usdCents, participantIds, paidBy)` para realizar el reparto en centavos de USD asegurando que el sobrante (`remainder`) recaiga siempre sobre `paidBy`.
+- `calculateBalances`, `calculateDetailedBalances` y `calculateDebts` ahora aceptan un parámetro adicional `exchangeRates: ExchangeRates`.
+- En todas las funciones de cálculo de gastos, se convierte primero el monto original a centavos USD usando `toUsdCents`.
+- Todos los resultados y balances retornados por estas funciones ahora se expresan en USD en lugar de Bs.
+- Se agregó el comentario sobre `PaymentRecord.amountCents` indicando que ahora son centavos de USD.
+
+**`src/views/components/SummaryPanel.tsx`**
+- El panel ahora requiere `exchangeRates: ExchangeRates` en sus `Props`.
+- Los montos que antes se visualizaban con `Bs.` ahora se muestran como `$`.
+- El "Total gastado" ahora es la sumatoria de todos los gastos convertidos independientemente a USD mediante `toUsdCents`.
+- Se pasó `exchangeRates` como parámetro a `calculateDetailedBalances`.
+
+**`src/views/components/SettlementPanel.tsx`**
+- El panel requiere `exchangeRates` en sus `Props`.
+- Se reemplazaron todas las menciones a `Bs.` por `$`.
+- Se pasó `exchangeRates` como parámetro a `calculateDebts`.
+
+**`src/App.tsx`**
+- Se provee `state.exchangeRates` a los paneles `SummaryPanel` y `SettlementPanel`.
+
+### Resultado
+
+Se verificó mediante el compilador `npx tsc --noEmit` que todas las firmas coinciden sin presentar errores de tipo. La aplicación utiliza de principio a fin los saldos calculados en dólares americanos ($), y todos los saldos en el SummaryPanel garantizan cuadrar a $0.00.
+
+### Problemas encontrados
+
+Ninguno.
+
+### Correcciones realizadas
+
+Ninguna.
