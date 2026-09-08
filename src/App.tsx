@@ -5,6 +5,7 @@ import { AddExpenseForm } from './views/components/AddExpenseForm';
 import { ExpenseList } from './views/components/ExpenseList';
 import { SummaryPanel } from './views/components/SummaryPanel';
 import { SettlementPanel } from './views/components/SettlementPanel';
+import { ExchangeRatesPanel } from './views/components/ExchangeRatesPanel';
 
 type Tab = 'participantes' | 'gastos' | 'saldos' | 'liquidacion';
 
@@ -34,6 +35,7 @@ export default function App() {
     updateExpense,
     markTransferPaid,
     unmarkTransferPaid,
+    updateExchangeRates,
   } = useAppController();
 
   const hasParticipants = state.participants.length > 0;
@@ -69,6 +71,11 @@ export default function App() {
             )}
           </div>
         </div>
+
+        <ExchangeRatesPanel
+          rates={state.exchangeRates}
+          onUpdate={updateExchangeRates}
+        />
 
         {/* Pestañas */}
         <nav

@@ -1,3 +1,10 @@
+export type Currency = 'USD' | 'USDT' | 'BOB';
+
+export interface ExchangeRates {
+  usdToBob: number;    // cuántos bolivianos es 1 USD
+  usdToUsdt: number;   // cuántos USDT es 1 USD
+}
+
 // Modelo principal: representa un participante del viaje
 export interface Participant {
   id: string;
@@ -9,7 +16,8 @@ export interface Participant {
 export interface Expense {
   id: string;
   description: string;
-  amount: number;           // Monto total del gasto
+  amount: number;           // Monto total del gasto (en su moneda original)
+  currency: Currency;       // Moneda original en la que se registró el gasto
   paidBy: string;           // ID del participante que pagó
   participants: string[];   // IDs de los participantes que comparten el gasto
   date: string;
@@ -40,4 +48,5 @@ export interface AppState {
   participants: Participant[];
   expenses: Expense[];
   payments: PaymentRecord[];   // Transferencias de liquidación ya realizadas
+  exchangeRates: ExchangeRates;
 }

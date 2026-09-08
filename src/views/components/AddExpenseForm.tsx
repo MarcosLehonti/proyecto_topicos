@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { Participant } from '../../models';
+import type { Currency, Participant } from '../../models';
+import { CURRENCIES, CURRENCY_SYMBOLS, formatMoney, isCurrency } from '../../services/currency';
 import { Card } from './Card';
 
 interface ExpenseData {
   description: string;
   amount: number;
+  currency: Currency;
   paidBy: string;
   participants: string[];
   date: string;
@@ -13,6 +15,7 @@ interface ExpenseData {
 interface FieldErrors {
   description?: string;
   amount?: string;
+  currency?: string;
   paidBy?: string;
   participants?: string;
 }
@@ -32,6 +35,7 @@ export function AddExpenseForm({ participants, onAdd }: Props) {
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<Currency>('BOB');
   const [paidBy, setPaidBy] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [date, setDate] = useState(today);
@@ -73,6 +77,10 @@ export function AddExpenseForm({ participants, onAdd }: Props) {
       newErrors.amount = 'El monto debe ser mayor que cero.';
     }
 
+    if (!currency || !isCurrency(currency)) {
+      newErrors.currency = 'Selecciona la moneda del gasto.';
+    }
+
     if (!paidBy) {
       newErrors.paidBy = 'Debes indicar quién realizó el pago.';
     }
@@ -94,6 +102,7 @@ export function AddExpenseForm({ participants, onAdd }: Props) {
     const error = onAdd({
       description: description.trim(),
       amount: parseFloat(amount),
+      currency,
       paidBy,
       participants: selected,
       date,
@@ -107,6 +116,7 @@ export function AddExpenseForm({ participants, onAdd }: Props) {
     // Reset del formulario (mantener todos seleccionados)
     setDescription('');
     setAmount('');
+    setCurrency('BOB');
     setPaidBy('');
     setDate(today);
     setSelected(participants.map((p) => p.id));
@@ -166,29 +176,53 @@ export function AddExpenseForm({ participants, onAdd }: Props) {
           )}
         </div>
 
-        {/* Monto y fecha */}
+        {/* Monto, moneda y fecha */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-white/60 text-xs font-medium uppercase tracking-wide block mb-1.5">
-              Monto (Bs.)
+              Monto
             </label>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => {
-                setAmount(e.target.value);
-                if (errors.amount) setErrors((er) => ({ ...er, amount: undefined }));
-              }}
-              placeholder="0.00"
-              min="0.01"
-              step="0.01"
-              className={`w-full bg-white/10 border rounded-xl px-4 py-2.5 text-white placeholder-white/40 focus:outline-none transition-colors text-sm ${
-                errors.amount ? 'border-red-400/70 focus:border-red-400' : 'border-white/20 focus:border-indigo-400'
-              }`}
-            />
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  if (errors.amount) setErrors((er) => ({ ...er, amount: undefined }));
+                }}
+                placeholder="0.00"
+                min="0.01"
+                step="0.01"
+                className={`min-w-0 flex-1 bg-white/10 border rounded-xl px-4 py-2.5 text-white placeholder-white/40 focus:outline-none transition-colors text-sm ${
+                  errors.amount ? 'border-red-400/70 focus:border-red-400' : 'border-white/20 focus:border-indigo-400'
+                }`}
+              />
+              <select
+                value={currency}
+                onChange={(e) => {
+                  if (isCurrency(e.target.value)) setCurrency(e.target.value);
+                  if (errors.currency) setErrors((er) => ({ ...er, currency: undefined }));
+                }}
+                className={`w-[6.5rem] shrink-0 bg-white/10 border rounded-xl px-2 py-2.5 text-white focus:outline-none transition-colors text-sm appearance-none ${
+                  errors.currency ? 'border-red-400/70 focus:border-red-400' : 'border-white/20 focus:border-indigo-400'
+                }`}
+                aria-label="Moneda"
+              >
+                {CURRENCIES.map((code) => (
+                  <option key={code} value={code} className="bg-gray-800">
+                    {code} ({CURRENCY_SYMBOLS[code]})
+                  </option>
+                ))}
+              </select>
+            </div>
             {errors.amount && (
               <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
                 <span>⚠</span> {errors.amount}
+              </p>
+            )}
+            {errors.currency && (
+              <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                <span>⚠</span> {errors.currency}
               </p>
             )}
           </div>
@@ -283,7 +317,7 @@ export function AddExpenseForm({ participants, onAdd }: Props) {
           <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-2.5 text-xs text-indigo-300">
             Cada participante pagaría{' '}
             <span className="font-semibold">
-              Bs. {(parseFloat(amount) / selected.length).toFixed(2)}
+              {formatMoney(parseFloat(amount) / selected.length, currency)}
             </span>
             {' '}({selected.length} persona{selected.length !== 1 ? 's' : ''})
           </div>

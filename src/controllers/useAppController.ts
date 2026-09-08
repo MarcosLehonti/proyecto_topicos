@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
-import type { AppState, Expense, Participant, PaymentRecord } from '../models';
+import type { AppState, Currency, Expense, ExchangeRates, Participant, PaymentRecord } from '../models';
 import { loadState, saveState } from '../services/storage';
 import { generateId } from '../services/calculations';
+import { isCurrency } from '../services/currency';
 
 /**
  * Controller principal de la aplicación.
@@ -98,10 +99,15 @@ export function useAppController() {
     (data: {
       description: string;
       amount: number;
+      currency: Currency;
       paidBy: string;
       participants: string[];
       date: string;
     }): string | null => {
+      if (!isCurrency(data.currency)) {
+        return 'La moneda es obligatoria.';
+      }
+
       // Validar que el pagador existe en la lista de participantes
       const payerExists = state.participants.some((p) => p.id === data.paidBy);
       if (!payerExists) {
@@ -152,11 +158,16 @@ export function useAppController() {
       data: {
         description: string;
         amount: number;
+        currency: Currency;
         paidBy: string;
         participants: string[];
         date: string;
       }
     ): string | null => {
+      if (!isCurrency(data.currency)) {
+        return 'La moneda es obligatoria.';
+      }
+
       // Validar que el pagador existe en la lista de participantes
       const payerExists = state.participants.some((p) => p.id === data.paidBy);
       if (!payerExists) {
@@ -179,6 +190,35 @@ export function useAppController() {
       });
 
       return null; // éxito
+    },
+    [state, updateState]
+  );
+
+  /**
+   * Actualiza las tasas de cambio. Ambos valores deben ser números > 0.
+   */
+  const updateExchangeRates = useCallback(
+    (rates: ExchangeRates): string | null => {
+      if (
+        typeof rates.usdToBob !== 'number' ||
+        typeof rates.usdToUsdt !== 'number' ||
+        !Number.isFinite(rates.usdToBob) ||
+        !Number.isFinite(rates.usdToUsdt) ||
+        rates.usdToBob <= 0 ||
+        rates.usdToUsdt <= 0
+      ) {
+        return 'Las tasas deben ser números mayores que cero.';
+      }
+
+      updateState({
+        ...state,
+        exchangeRates: {
+          usdToBob: rates.usdToBob,
+          usdToUsdt: rates.usdToUsdt,
+        },
+      });
+
+      return null;
     },
     [state, updateState]
   );
@@ -231,5 +271,6 @@ export function useAppController() {
     updateExpense,
     markTransferPaid,
     unmarkTransferPaid,
+    updateExchangeRates,
   };
 }

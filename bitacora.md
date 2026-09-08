@@ -1237,3 +1237,118 @@ Como resultado:
 Al agregar el nuevo gasto de Bs. 100, la pestaña liquidación ahora:
 1. Mantiene las transferencias pasadas en la sección de "completadas".
 2. Genera las deudas de forma correcta basadas únicamente en el balance ajustado (es decir, solo cobra la diferencia real, en este caso los Bs. 25 a cada uno si ya estaban a mano antes de ese gasto).
+
+---
+
+## Iteración 15 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y el archivo plan-alumnos-multimoneda.md (secciones 2 y 3) para respetar la arquitectura y las decisiones de diseño.
+>
+> Eres el Alumno 1. Implementa SOLO esta parte. No reescribas calculations.ts. No cambies todavía los saldos ni la liquidación a dólares. No pidas moneda al marcar un pago de liquidación.
+>
+> Objetivo de esta iteración:
+> Los gastos deben poder ingresarse y editarse en tres monedas: dólares americanos (USD), USDT y bolivianos (BOB). También debe existir una forma sencilla de ver y editar las tasas de cambio, porque los siguientes alumnos las van a usar.
+>
+> Requisitos:
+>
+> 1. En src/models/index.ts:
+>    - Exporta type Currency = 'USD' | 'USDT' | 'BOB'
+>    - Agrega currency: Currency a Expense
+>    - Agrega interface ExchangeRates { usdToBob: number; usdToUsdt: number }
+>    - Agrega exchangeRates: ExchangeRates a AppState
+>    - Gastos antiguos sin currency deben tratarse como BOB (retrocompatibilidad en storage, no en cada vista)
+>
+> 2. En src/services/storage.ts:
+>    - DEFAULT_STATE debe incluir exchangeRates: { usdToBob: 6.96, usdToUsdt: 1 }
+>    - loadState() debe seguir usando spread defensivo con DEFAULT_STATE
+>    - Si un gasto cargado no tiene currency, asígnale 'BOB' al hidratar el estado
+>
+> 3. Crea src/services/currency.ts (sin usarlo aún para saldos) con helpers puros:
+>    - CURRENCY_LABELS y CURRENCY_SYMBOLS para USD ($), USDT (USDT), BOB (Bs.)
+>    - formatMoney(amount, currency) para mostrar el monto original
+>    - Puedes dejar también firmas de conversión a USD documentadas, pero NO las conectes a calculations.ts en esta iteración
+>
+> 4. Controller (useAppController.ts):
+>    - addExpense y updateExpense deben recibir y persistir currency
+>    - Agrega updateExchangeRates(rates) que valide: ambos valores deben ser números > 0
+>    - Expón updateExchangeRates en el return del hook
+>
+> 5. UI de tasas (sencilla, consistente con el diseño dark actual):
+>    - Un bloque visible (por ejemplo en el header de App.tsx o un pequeño panel) para editar:
+>      - Bs. por 1 USD (usdToBob)
+>      - USDT por 1 USD (usdToUsdt)
+>    - Valores por defecto 6.96 y 1
+>    - Guardar en localStorage a través del controller
+>
+> 6. UI de gastos:
+>    - AddExpenseForm: selector obligatorio de moneda (USD / USDT / BOB) junto al monto. Default sugerido: BOB, para no romper la costumbre actual.
+>    - ExpenseList: mostrar la moneda original de cada gasto (símbolo + monto). El editor inline también debe permitir cambiar la moneda.
+>    - Validaciones iguales que ahora (descripción, monto > 0, pagador, al menos un participante) más moneda requerida.
+>
+> 7. No mezcles monedas en el total de la lista de gastos si no puedes convertirlo aún. Si el total dejaría de tener sentido (sumar 100 Bs. + 100 USD), o bien oculta el total único, o muéstralo separado por moneda, o indica que el total unificado llegará en la siguiente iteración. No presentes un solo "Bs. XXX" sumando monedas distintas.
+>
+> 8. Mantén el diseño existente (Tailwind, dark, pestañas). No agregues librerías.
+>
+> 9. Compila con tsc --noEmit. Prueba en el navegador:
+>    - Crear un gasto en BOB, uno en USD y uno en USDT
+>    - Editar la moneda de un gasto
+>    - Cambiar las tasas y refrescar: deben persistir
+>    - Recargar la página: gastos y tasas siguen ahí
+>    - Datos viejos sin currency se ven como BOB
+>
+> 10. Registra esta iteración en bitacora.md como Iteración 15, con fecha de hoy, el prompt recibido textual, cambios, resultado, problemas y correcciones SOLO si ocurrieron de verdad. No borres entradas anteriores. No inventes problemas.
+>
+> Cuando termines, no hagas el trabajo de los alumnos 2, 3 ni 4.
+
+### Cambios realizados
+
+**`src/models/index.ts`**
+- Nuevo `type Currency = 'USD' | 'USDT' | 'BOB'`.
+- Nueva `interface ExchangeRates { usdToBob; usdToUsdt }`.
+- `Expense` ahora incluye `currency: Currency`.
+- `AppState` ahora incluye `exchangeRates: ExchangeRates`.
+
+**`src/services/storage.ts`**
+- `DEFAULT_STATE.exchangeRates` = `{ usdToBob: 6.96, usdToUsdt: 1 }`.
+- `loadState()` sigue usando spread defensivo `{ ...DEFAULT_STATE, ...parsed }`.
+- Al hidratar, un gasto sin `currency` recibe `'BOB'`.
+
+**`src/services/currency.ts`** (nuevo)
+- `CURRENCY_LABELS`, `CURRENCY_SYMBOLS` y `formatMoney(amount, currency)`.
+- `toUsdCents` / `fromUsdCents` documentados para las iteraciones siguientes. **No se conectaron a `calculations.ts`.**
+
+**`src/controllers/useAppController.ts`**
+- `addExpense` y `updateExpense` reciben y persisten `currency`.
+- Nueva `updateExchangeRates(rates)`: ambos valores deben ser números finitos `> 0`.
+- Expuesta en el return del hook.
+
+**UI**
+- `ExchangeRatesPanel` en el header: editar Bs. por 1 USD y USDT por 1 USD, guardar vía controller.
+- `AddExpenseForm`: selector USD / USDT / BOB junto al monto (default BOB).
+- `ExpenseList`: muestra símbolo + monto original; el editor inline permite cambiar la moneda.
+- Totales de la lista separados por moneda (no se suma Bs. + $ + USDT). Si hay más de una moneda, se indica que el total unificado llega en la siguiente iteración.
+
+No se reescribió `calculations.ts`. Saldos y liquidación siguen como estaban. No se pide moneda al marcar un pago.
+
+### Resultado
+
+Vite aplicó HMR de los módulos tocados sin errores de transformación.
+
+`npx tsc --noEmit` y las pruebas interactivas en el navegador no se pudieron completar desde el agente: el shell local devolvió `spawn UNKNOWN` y no había herramientas de browser disponibles. Hay que verificar en `http://localhost:5173/`:
+
+- Crear un gasto en BOB, uno en USD y uno en USDT
+- Editar la moneda de un gasto
+- Cambiar las tasas, refrescar: deben persistir
+- Recargar la página: gastos y tasas siguen ahí
+- Datos viejos sin `currency` se ven como BOB
+- `npx tsc --noEmit` debe salir 0
+
+### Problemas encontrados
+
+El entorno del agente no pudo lanzar procesos de shell (`spawn UNKNOWN`) ni automatizar el navegador. No es un error del código de la app.
+
+### Correcciones realizadas
+
+Ninguna sobre el código: no hubo un fallo de implementación que hubiera que revertir.
