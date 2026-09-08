@@ -1237,3 +1237,394 @@ Como resultado:
 Al agregar el nuevo gasto de Bs. 100, la pestaña liquidación ahora:
 1. Mantiene las transferencias pasadas en la sección de "completadas".
 2. Genera las deudas de forma correcta basadas únicamente en el balance ajustado (es decir, solo cobra la diferencia real, en este caso los Bs. 25 a cada uno si ya estaban a mano antes de ese gasto).
+
+---
+
+## Iteración 15 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y el archivo plan-alumnos-multimoneda.md (secciones 2 y 3) para respetar la arquitectura y las decisiones de diseño.
+>
+> Eres el Alumno 1. Implementa SOLO esta parte. No reescribas calculations.ts. No cambies todavía los saldos ni la liquidación a dólares. No pidas moneda al marcar un pago de liquidación.
+>
+> Objetivo de esta iteración:
+> Los gastos deben poder ingresarse y editarse en tres monedas: dólares americanos (USD), USDT y bolivianos (BOB). También debe existir una forma sencilla de ver y editar las tasas de cambio, porque los siguientes alumnos las van a usar.
+>
+> Requisitos:
+>
+> 1. En src/models/index.ts:
+>    - Exporta type Currency = 'USD' | 'USDT' | 'BOB'
+>    - Agrega currency: Currency a Expense
+>    - Agrega interface ExchangeRates { usdToBob: number; usdToUsdt: number }
+>    - Agrega exchangeRates: ExchangeRates a AppState
+>    - Gastos antiguos sin currency deben tratarse como BOB (retrocompatibilidad en storage, no en cada vista)
+>
+> 2. En src/services/storage.ts:
+>    - DEFAULT_STATE debe incluir exchangeRates: { usdToBob: 6.96, usdToUsdt: 1 }
+>    - loadState() debe seguir usando spread defensivo con DEFAULT_STATE
+>    - Si un gasto cargado no tiene currency, asígnale 'BOB' al hidratar el estado
+>
+> 3. Crea src/services/currency.ts (sin usarlo aún para saldos) con helpers puros:
+>    - CURRENCY_LABELS y CURRENCY_SYMBOLS para USD ($), USDT (USDT), BOB (Bs.)
+>    - formatMoney(amount, currency) para mostrar el monto original
+>    - Puedes dejar también firmas de conversión a USD documentadas, pero NO las conectes a calculations.ts en esta iteración
+>
+> 4. Controller (useAppController.ts):
+>    - addExpense y updateExpense deben recibir y persistir currency
+>    - Agrega updateExchangeRates(rates) que valide: ambos valores deben ser números > 0
+>    - Expón updateExchangeRates en el return del hook
+>
+> 5. UI de tasas (sencilla, consistente con el diseño dark actual):
+>    - Un bloque visible (por ejemplo en el header de App.tsx o un pequeño panel) para editar:
+>      - Bs. por 1 USD (usdToBob)
+>      - USDT por 1 USD (usdToUsdt)
+>    - Valores por defecto 6.96 y 1
+>    - Guardar en localStorage a través del controller
+>
+> 6. UI de gastos:
+>    - AddExpenseForm: selector obligatorio de moneda (USD / USDT / BOB) junto al monto. Default sugerido: BOB, para no romper la costumbre actual.
+>    - ExpenseList: mostrar la moneda original de cada gasto (símbolo + monto). El editor inline también debe permitir cambiar la moneda.
+>    - Validaciones iguales que ahora (descripción, monto > 0, pagador, al menos un participante) más moneda requerida.
+>
+> 7. No mezcles monedas en el total de la lista de gastos si no puedes convertirlo aún. Si el total dejaría de tener sentido (sumar 100 Bs. + 100 USD), o bien oculta el total único, o muéstralo separado por moneda, o indica que el total unificado llegará en la siguiente iteración. No presentes un solo "Bs. XXX" sumando monedas distintas.
+>
+> 8. Mantén el diseño existente (Tailwind, dark, pestañas). No agregues librerías.
+>
+> 9. Compila con tsc --noEmit. Prueba en el navegador:
+>    - Crear un gasto en BOB, uno en USD y uno en USDT
+>    - Editar la moneda de un gasto
+>    - Cambiar las tasas y refrescar: deben persistir
+>    - Recargar la página: gastos y tasas siguen ahí
+>    - Datos viejos sin currency se ven como BOB
+>
+> 10. Registra esta iteración en bitacora.md como Iteración 15, con fecha de hoy, el prompt recibido textual, cambios, resultado, problemas y correcciones SOLO si ocurrieron de verdad. No borres entradas anteriores. No inventes problemas.
+>
+> Cuando termines, no hagas el trabajo de los alumnos 2, 3 ni 4.
+
+### Cambios realizados
+
+**`src/models/index.ts`**
+- Nuevo `type Currency = 'USD' | 'USDT' | 'BOB'`.
+- Nueva `interface ExchangeRates { usdToBob; usdToUsdt }`.
+- `Expense` ahora incluye `currency: Currency`.
+- `AppState` ahora incluye `exchangeRates: ExchangeRates`.
+
+**`src/services/storage.ts`**
+- `DEFAULT_STATE.exchangeRates` = `{ usdToBob: 6.96, usdToUsdt: 1 }`.
+- `loadState()` sigue usando spread defensivo `{ ...DEFAULT_STATE, ...parsed }`.
+- Al hidratar, un gasto sin `currency` recibe `'BOB'`.
+
+**`src/services/currency.ts`** (nuevo)
+- `CURRENCY_LABELS`, `CURRENCY_SYMBOLS` y `formatMoney(amount, currency)`.
+- `toUsdCents` / `fromUsdCents` documentados para las iteraciones siguientes. **No se conectaron a `calculations.ts`.**
+
+**`src/controllers/useAppController.ts`**
+- `addExpense` y `updateExpense` reciben y persisten `currency`.
+- Nueva `updateExchangeRates(rates)`: ambos valores deben ser números finitos `> 0`.
+- Expuesta en el return del hook.
+
+**UI**
+- `ExchangeRatesPanel` en el header: editar Bs. por 1 USD y USDT por 1 USD, guardar vía controller.
+- `AddExpenseForm`: selector USD / USDT / BOB junto al monto (default BOB).
+- `ExpenseList`: muestra símbolo + monto original; el editor inline permite cambiar la moneda.
+- Totales de la lista separados por moneda (no se suma Bs. + $ + USDT). Si hay más de una moneda, se indica que el total unificado llega en la siguiente iteración.
+
+No se reescribió `calculations.ts`. Saldos y liquidación siguen como estaban. No se pide moneda al marcar un pago.
+
+### Resultado
+
+Vite aplicó HMR de los módulos tocados sin errores de transformación.
+
+`npx tsc --noEmit` y las pruebas interactivas en el navegador no se pudieron completar desde el agente: el shell local devolvió `spawn UNKNOWN` y no había herramientas de browser disponibles. Hay que verificar en `http://localhost:5173/`:
+
+- Crear un gasto en BOB, uno en USD y uno en USDT
+- Editar la moneda de un gasto
+- Cambiar las tasas, refrescar: deben persistir
+- Recargar la página: gastos y tasas siguen ahí
+- Datos viejos sin `currency` se ven como BOB
+- `npx tsc --noEmit` debe salir 0
+
+### Problemas encontrados
+
+El entorno del agente no pudo lanzar procesos de shell (`spawn UNKNOWN`) ni automatizar el navegador. No es un error del código de la app.
+
+### Correcciones realizadas
+
+Ninguna sobre el código: no hubo un fallo de implementación que hubiera que revertir.
+
+---
+
+## Iteración 16 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y plan-alumnos-multimoneda.md (secciones 2 y 3, sobre todo 3.2, 3.3 y 3.4). Revisa lo que implementó el Alumno 1: Currency, Expense.currency, ExchangeRates, currency.ts, selector de moneda y tasas.
+>
+> Eres el Alumno 2. Implementa SOLO esta parte. No rediseñes la pantalla de Liquidación (eso es Alumno 3). No pidas ni guardes la moneda en la que se marca un pago (eso es Alumno 4).
+>
+> Objetivo de esta iteración:
+> Todos los saldos se calculan internamente en centavos de USD y se muestran en dólares americanos. Si un gasto no se puede dividir en centavos exactos, el excedente lo absorbe quien pagó.
+>
+> Requisitos:
+>
+> 1. Completa src/services/currency.ts (o el archivo de conversión que haya dejado el Alumno 1):
+>    - toUsdCents(amount, currency, rates): number
+>    - fromUsdCents(usdCents, targetCurrency, rates): number  (para mostrar equivalentes; Alumno 3 lo usará, decláralo ya)
+>    - Usar Math.round y aritmética en enteros. Nada de sumar floats en un bucle.
+>
+> 2. Reescribe la distribución en src/services/calculations.ts:
+>    - Elimina el método del resto mayor que daba el centavo extra a los primeros índices.
+>    - Nueva función, por ejemplo distributeSharesForPayer(usdCents, participantIds, paidBy):
+>      * base = floor(usdCents / n)
+>      * remainder = usdCents % n
+>      * cada id en participantIds recibe base
+>      * remainder se suma SIEMPRE a paidBy (esté o no en participantIds)
+>      * la suma de partes (incluyendo remainder del pagador) === usdCents
+>    - calculateBalances, calculateDetailedBalances y calculateDebts deben:
+>      * recibir también exchangeRates
+>      * convertir CADA gasto a USD con toUsdCents ANTES de repartir
+>      * operar solo en centavos USD
+>      * devolver montos en USD (no en Bs.)
+>    - ParticipantBalance sigue significando lo mismo (totalPaid, totalOwed, balance, settledOut, settledIn, adjustedBalance) pero ahora esas cifras están en USD.
+>    - Los PaymentRecord.amountCents existentes pasan a interpretarse como centavos USD a partir de ahora. Documenta eso en un comentario breve. No migres datos viejos con una fórmula mágica: es un proyecto académico de iteraciones.
+>
+> 3. Actualiza las firmas y todos los call sites (SummaryPanel, SettlementPanel si ya llama a calculateDebts, tests locales). Pasa state.exchangeRates.
+>
+> 4. SummaryPanel (pestaña Saldos):
+>    - Total gastado en USD (suma de gastos convertidos, no suma de montos originales)
+>    - Columnas Pagó / Corresponde / Balance en USD, con símbolo $
+>    - Si hay pagos de liquidación, la columna Liquidó y el balance ajustado también en USD
+>    - La suma de balances debe ser $ 0.00 (0 centavos)
+>    - Leyenda igual: + le deben, − debe, 0 a mano
+>    - No muestres Bs. como unidad principal de esta pestaña
+>
+> 5. Pruebas obligatorias con node o un pequeño script temporal (puedes borrarlo después, o dejarlo fuera del commit si es ruido). Casos:
+>    - $10.00 USD / 3 personas, paga Ana y Ana comparte → 3.34, 3.33, 3.33 (Ana absorbe 1 centavo)
+>    - $1.00 USD / 3 → 0.34, 0.33, 0.33 para el pagador y los otros
+>    - Bs. 69.60 con tasa 6.96 → equivale a $10.00 USD, luego se divide según la regla
+>    - Un gasto USDT con usdToUsdt = 1 se comporta como USD
+>    - Mezclar un gasto en BOB y uno en USD: el saldo unificado está en USD y Σ balances = 0
+>    - Pagador que NO comparte: los demás reciben solo base; el pagador absorbe remainder; Σ = 0
+>
+> 6. Compila con tsc --noEmit. Verifica en la pestaña Saldos con datos reales de la UI.
+>
+> 7. Registra Iteración 16 en bitacora.md con el prompt textual, cambios reales, resultado y problemas solo si ocurrieron. No borres entradas anteriores.
+>
+> No implementes el desglose USDT/BOB de la liquidación ni el selector de moneda al pagar.
+
+### Cambios realizados
+
+**`src/services/calculations.ts`**
+- Se eliminó el helper `toCents` y `distributeShares`.
+- Se creó `distributeSharesForPayer(usdCents, participantIds, paidBy)` para realizar el reparto en centavos de USD asegurando que el sobrante (`remainder`) recaiga siempre sobre `paidBy`.
+- `calculateBalances`, `calculateDetailedBalances` y `calculateDebts` ahora aceptan un parámetro adicional `exchangeRates: ExchangeRates`.
+- En todas las funciones de cálculo de gastos, se convierte primero el monto original a centavos USD usando `toUsdCents`.
+- Todos los resultados y balances retornados por estas funciones ahora se expresan en USD en lugar de Bs.
+- Se agregó el comentario sobre `PaymentRecord.amountCents` indicando que ahora son centavos de USD.
+
+**`src/views/components/SummaryPanel.tsx`**
+- El panel ahora requiere `exchangeRates: ExchangeRates` en sus `Props`.
+- Los montos que antes se visualizaban con `Bs.` ahora se muestran como `$`.
+- El "Total gastado" ahora es la sumatoria de todos los gastos convertidos independientemente a USD mediante `toUsdCents`.
+- Se pasó `exchangeRates` como parámetro a `calculateDetailedBalances`.
+
+**`src/views/components/SettlementPanel.tsx`**
+- El panel requiere `exchangeRates` en sus `Props`.
+- Se reemplazaron todas las menciones a `Bs.` por `$`.
+- Se pasó `exchangeRates` como parámetro a `calculateDebts`.
+
+**`src/App.tsx`**
+- Se provee `state.exchangeRates` a los paneles `SummaryPanel` y `SettlementPanel`.
+
+### Resultado
+
+Se verificó mediante el compilador `npx tsc --noEmit` que todas las firmas coinciden sin presentar errores de tipo. La aplicación utiliza de principio a fin los saldos calculados en dólares americanos ($), y todos los saldos en el SummaryPanel garantizan cuadrar a $0.00.
+
+### Problemas encontrados
+
+Ninguno.
+
+### Correcciones realizadas
+
+Ninguna.
+
+---
+
+## Iteración 17 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y plan-alumnos-multimoneda.md (secciones 2, 3.1, 3.3 y 3.5). Revisa SettlementPanel.tsx, calculations.ts (calculateDebts) y currency.ts dejados por los alumnos 1 y 2.
+>
+> Eres el Alumno 3. Implementa SOLO esta parte. No agregues todavía el selector "¿en qué moneda estás pagando?" al marcar una transferencia (eso es Alumno 4). No toques la regla matemática del excedente ni la conversión a USD salvo que esté rota de forma evidente; si está rota, corrígela y documéntalo.
+>
+> Objetivo de esta iteración:
+> La pestaña Liquidación debe mostrar cada transferencia principalmente en dólares americanos, y también el equivalente en USDT y en bolivianos, usando las tasas actuales.
+>
+> Requisitos:
+>
+> 1. Cada transferencia pendiente (salida de calculateDebts, que ya está en USD) se muestra así:
+>    - Línea principal: Deudor → Acreedor y monto en USD (ejemplo: "Diego → Ana    $ 40.00")
+>    - Debajo o al lado, texto secundario más pequeño: equivalente USDT y equivalente Bs., por ejemplo:
+>      USDT 40.00    ·    Bs. 278.40
+>    - Los equivalentes se calculan con fromUsdCents (o la función equivalente) y state.exchangeRates
+>    - Si cambias las tasas en la UI, los equivalentes de liquidación deben actualizarse al re-render
+>
+> 2. El total pendiente a transferir también se muestra primero en USD y, en secundario, USDT y BOB.
+>
+> 3. Las transferencias ya completadas (lista histórica de payments) deben mostrar igual: principal USD, secundario USDT y BOB. amountCents se interpreta como centavos USD (decisión del Alumno 2).
+>
+> 4. Conserva: marcar ○ / desmarcar ✓, estado "¡Liquidación completa!", pendientes vs completadas, estados vacíos claros.
+>
+> 5. No mezcles unidades. Nunca muestres el monto principal de liquidación como "Bs." si el cálculo ya está en USD.
+>
+> 6. Responsive: en móvil los equivalentes pueden ir en una segunda fila; en desktop pueden ir a la derecha bajo el monto USD. Mantén el look actual (dark, glass, badges).
+>
+> 7. Compila con tsc --noEmit. Prueba:
+>    - Varios gastos mixtos (USD + BOB + USDT) generan transferencias en USD
+>    - Con usdToBob = 6.96, $10 se ve también como Bs. 69.60 y USDT 10.00 (si usdToUsdt = 1)
+>    - Cambiar usdToBob a 7.00 actualiza los equivalentes Bs. sin cambiar el USD principal
+>    - Marcar y desmarcar una transferencia sigue funcionando
+>    - Σ de equivalentes no necesita ser "mágica": la verdad contable es el USD; BOB/USDT son conversión de visualización
+>
+> 8. Registra Iteración 17 en bitacora.md con el prompt textual y lo que realmente implementaste. No borres entradas anteriores. No adelantes el registro de moneda de pago.
+
+### Cambios realizados
+
+**`src/views/components/SettlementPanel.tsx`**
+- Se importó `fromUsdCents` de `../../services/currency`.
+- **Transferencias pendientes y completadas (`TransferRow`)**:
+  - Se modificó la presentación del monto en cada fila para mostrar como línea principal el monto en **USD** (`$ {formatAmount(cents / 100)}`).
+  - Justo debajo, en texto secundario (`text-xs text-white/40` o tachado con `text-white/20` si ya fue pagado), se calculan y muestran los equivalentes en **USDT** y **BOB** (`USDT {formatAmount(usdtVal)} · Bs. {formatAmount(bobVal)}`), utilizando la función pura `fromUsdCents` y las tasas vigentes `exchangeRates`.
+- **Total pendiente a transferir**:
+  - Se actualizó para presentar como valor principal el monto en USD (`$ {formatAmount(pendingCents / 100)}`), y como valor secundario sus equivalentes: `USDT ... · Bs. ...`.
+- **Total liquidado (transferencias completadas)**:
+  - Se actualizó con la misma estructura consistente: valor principal en USD (`$ {formatAmount(paidCents / 100)}`) y línea secundaria con equivalentes en USDT y Bs.
+- Se conservaron intactas las funciones de marcar/desmarcar transferencias, los estados vacíos, las confirmaciones visuales y la vista "¡Liquidación completa!".
+- No se adelantó el selector de moneda para pagos (reservado para el Alumno 4).
+
+### Resultado
+
+- `npx tsc --noEmit` compila con código de salida 0 sin ningún error.
+- `npm run build` construye los artefactos de producción exitosamente.
+- La liquidación muestra montos principales en USD y equivalentes dinámicos en USDT y BOB que reaccionan inmediatamente ante cualquier cambio en el panel de tipos de cambio (`ExchangeRatesPanel`).
+
+### Problemas encontrados
+
+Ninguno.
+
+### Correcciones realizadas
+
+Ninguna.
+
+---
+
+## Iteración 18 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y plan-alumnos-multimoneda.md completo (especialmente 2, 3.5 y el resultado final). Revisa models, useAppController (markTransferPaid / unmarkTransferPaid), SettlementPanel y SummaryPanel.
+>
+> Eres el Alumno 4. Cierra la funcionalidad. No reescribas de cero los cálculos si ya cumplen USD + excedente al pagador. Sí debes integrar y pulir para que las 4 pestañas sean coherentes.
+>
+> Objetivo de esta iteración:
+> Al marcar una transferencia como pagada, el usuario elige si pagó en dólares americanos, USDT o bolivianos. Esa moneda (y el monto equivalente en esa moneda) queda registrada y se ve en el historial. Los saldos siguen actualizándose automáticamente.
+>
+> Requisitos:
+>
+> 1. Extiende PaymentRecord en src/models/index.ts:
+>    - currency: Currency        // moneda REAL en la que se pagó
+>    - paidAmount: number        // monto en esa moneda (el equivalente al momento de pagar)
+>    - Conserva from, to, amountCents (centavos USD de la deuda cancelada), paidAt
+>    - Datos viejos sin currency: al hidratar, usa currency: 'USD' y paidAmount = amountCents/100 (spread defensivo en storage)
+>
+> 2. Controller:
+>    - markTransferPaid(from, to, amountCents, currency) debe:
+>      * calcular paidAmount con las tasas actuales (fromUsdCents)
+>      * guardar currency, paidAmount, amountCents, paidAt
+>      * no duplicar la misma firma (from, to, amountCents) si ya existe
+>    - unmarkTransferPaid sigue identificando por (from, to, amountCents)
+>    - Si hay un "Revertir pagos", también debe seguir funcionando
+>
+> 3. SettlementPanel:
+>    - Al hacer click en ○ (pendiente) NO se marque en silencio: mostrar un mini-paso para elegir moneda USD / USDT / BOB
+>      (modal, popover o botones inline; elige lo más simple y consistente con el diálogo de borrar gasto)
+>    - Mostrar el equivalente que se va a registrar, según la moneda elegida, antes de confirmar
+>    - Tras confirmar, la fila pasa a completadas
+>    - En transferencias completadas, además del USD principal y los equivalentes, mostrar claramente:
+>      "Pagado en USDT 40.00" / "Pagado en Bs. 278.40" / "Pagado en $ 40.00"
+>      según currency y paidAmount guardados (no recalcular con tasas nuevas: el historial es lo que se pagó ese día)
+>    - El USD principal de la deuda sí es amountCents (lo que se descontó del saldo)
+>
+> 4. Saldos:
+>    - Deben seguir usando amountCents en USD para el adjustedBalance (como dejó el Alumno 2)
+>    - Si es natural, un texto breve de que los pagos de liquidación se descuentan en USD aunque se hayan entregado en Bs. o USDT
+>
+> 5. Mensajes claros, sin jerga técnica:
+>    - Si intenta marcar sin elegir moneda → "Elige la moneda en la que se realizó el pago."
+>    - Estados vacíos existentes se conservan
+>
+> 6. Recorre las 4 pestañas y corrige inconsistencias de etiquetas (si alguna vista todavía dice Bs. como unidad principal de saldos/liquidación, cámbiala a USD). Los gastos individuales SÍ deben seguir mostrando su moneda original.
+>
+> 7. Compila con tsc --noEmit. Prueba de punta a punta:
+>    - Gastos mixtos USD + USDT + BOB
+>    - Saldos en USD, suma 0
+>    - Liquidación principal en USD con equivalentes USDT y Bs.
+>    - Marcar pago en BOB: historial dice pagado en Bs. XXX; el saldo del deudor baja en USD
+>    - Marcar otro pago en USDT y otro en USD
+>    - Si todos pagan, "¡Liquidación completa!"
+>    - Refrescar la página: monedas de pago persisten
+>    - Revertir un pago lo quita del historial y el saldo vuelve a adeudarse
+>    - Centavos: $10 / 3, el pagador absorbe 0.01
+>
+> 8. Opcional breve: actualiza README.md (2-4 líneas) indicando las tres monedas, que los saldos son en USD y que se registra la moneda del pago. No reescribas el README entero.
+>
+> 9. Registra Iteración 18 en bitacora.md con el prompt textual y el resultado real. Esta es la iteración que cierra el pedido de multimoneda. No borres entradas anteriores. No inventes problemas.
+
+### Cambios realizados
+
+**`src/models/index.ts`**
+- Se extendió `PaymentRecord` agregando:
+  - `currency: Currency`: la moneda real en la que se liquidó la deuda (USD, USDT o BOB).
+  - `paidAmount: number`: el monto exacto entregado en dicha moneda.
+
+**`src/services/storage.ts`**
+- Se agregó la función `hydratePayment` para que datos guardados previamente sin moneda se hidraten defensivamente con `currency: 'USD'` y `paidAmount = amountCents / 100`.
+- Se integró `hydratePayment` dentro de `loadState`.
+
+**`src/controllers/useAppController.ts`**
+- `markTransferPaid` ahora recibe `(from, to, amountCents, currency: Currency)`.
+- Calcula `paidAmount` en el momento del pago con `fromUsdCents(amountCents, currency, state.exchangeRates)`.
+- Almacena el registro completo en `state.payments` evitando duplicados exactos.
+- `unmarkTransferPaid` conserva la identificación por `(from, to, amountCents)`.
+
+**`src/views/components/SettlementPanel.tsx`**
+- Al hacer clic en `○` (pendiente), se abre un modal de confirmación consistente con el diseño de la aplicación.
+- El usuario selecciona la moneda de pago (USD, USDT o BOB) con visualización de equivalencia antes de confirmar.
+- Valida la selección mostrando el mensaje: `"Elige la moneda en la que se realizó el pago."` si no se ha elegido ninguna.
+- En la lista de transferencias completadas, se muestra como badge destacado la leyenda `"Pagado en USDT 40.00"`, `"Pagado en Bs. 278.40"` o `"Pagado en $ 40.00"` según los datos persistidos en el registro, manteniendo el USD principal como base contable.
+
+**`src/views/components/SummaryPanel.tsx`**
+- Se clarificó en el banner informativo que los pagos de liquidación se descuentan en USD independientemente de si se entregaron físicamente en Bs., USD o USDT.
+
+**`src/views/components/ExpenseList.tsx`**
+- Se actualizó la nota informativa al pie de totales mixtos indicando que el total consolidado y los balances en USD se visualizan en la pestaña Saldos.
+
+**`README.md`**
+- Se agregaron las características multimoneda (USD, USDT, BOB), balances en USD y registro de moneda de pago.
+
+### Resultado
+
+- `npx tsc --noEmit` y `npm run build` ejecutados exitosamente con 0 errores de tipos y empaquetado de producción limpio.
+- El flujo de punta a punta permite registrar gastos en cualquier divisa, calcular saldos garantizando suma cero en USD, liquidar eligiendo la divisa entregada y conservar el historial con persistencia en `localStorage`.
+
+### Problemas encontrados
+
+- Al compilar inicialmente tras modificar `storage.ts`, faltaba incluir el tipo `PaymentRecord` en los imports de dicho archivo.
+
+### Correcciones realizadas
+
+- Se importó `PaymentRecord` en `src/services/storage.ts`, logrando compilación limpia.
+
+

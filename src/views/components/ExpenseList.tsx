@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { Expense, Participant } from '../../models';
-import { formatAmount } from '../../services/calculations';
+import type { Currency, Expense, Participant } from '../../models';
+import { CURRENCIES, CURRENCY_SYMBOLS, formatMoney, isCurrency } from '../../services/currency';
 import { Card } from './Card';
 
 interface ExpenseData {
   description: string;
   amount: number;
+  currency: Currency;
   paidBy: string;
   participants: string[];
   date: string;
@@ -14,6 +15,7 @@ interface ExpenseData {
 interface FieldErrors {
   description?: string;
   amount?: string;
+  currency?: string;
   paidBy?: string;
   participants?: string;
 }
@@ -33,12 +35,21 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
   const getParticipantName = (id: string) =>
     participants.find((p) => p.id === id)?.name ?? 'Desconocido';
 
-  const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalsByCurrency = expenses.reduce<Record<Currency, number>>(
+    (acc, e) => {
+      acc[e.currency] = (acc[e.currency] ?? 0) + e.amount;
+      return acc;
+    },
+    { USD: 0, USDT: 0, BOB: 0 }
+  );
+  const currenciesWithTotal = CURRENCIES.filter((c) => totalsByCurrency[c] > 0);
+  const hasMixedCurrencies = currenciesWithTotal.length > 1;
 
   // ── Estado de edición ─────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editAmount, setEditAmount] = useState('');
+  const [editCurrency, setEditCurrency] = useState<Currency>('BOB');
   const [editPaidBy, setEditPaidBy] = useState('');
   const [editSelected, setEditSelected] = useState<string[]>([]);
   const [editDate, setEditDate] = useState('');
@@ -53,6 +64,7 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
     setEditingId(expense.id);
     setEditDescription(expense.description);
     setEditAmount(String(expense.amount));
+    setEditCurrency(expense.currency);
     setEditPaidBy(expense.paidBy);
     setEditSelected([...expense.participants]);
     setEditDate(expense.date);
@@ -101,6 +113,10 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
       newErrors.amount = 'El monto debe ser mayor que cero.';
     }
 
+    if (!editCurrency || !isCurrency(editCurrency)) {
+      newErrors.currency = 'Selecciona la moneda del gasto.';
+    }
+
     if (!editPaidBy) {
       newErrors.paidBy = 'Debes indicar quién realizó el pago.';
     }
@@ -122,6 +138,7 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
     const error = onUpdate(editingId, {
       description: editDescription.trim(),
       amount: parseFloat(editAmount),
+      currency: editCurrency,
       paidBy: editPaidBy,
       participants: editSelected,
       date: editDate,
@@ -178,7 +195,7 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
                               {expense.description}
                             </span>
                             <span className="text-indigo-300 font-bold text-sm whitespace-nowrap flex-shrink-0">
-                              Bs. {formatAmount(expense.amount)}
+                              {formatMoney(expense.amount, expense.currency)}
                             </span>
                           </div>
 
@@ -202,7 +219,7 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
                               <>
                                 <span className="text-white/20">·</span>
                                 <span className="text-white/40">
-                                  Bs. {formatAmount(sharePerPerson)} c/u
+                                  {formatMoney(sharePerPerson, expense.currency)} c/u
                                 </span>
                               </>
                             )}
@@ -281,30 +298,55 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
                           )}
                         </div>
 
-                        {/* Monto y fecha */}
+                        {/* Monto, moneda y fecha */}
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="text-white/60 text-xs font-medium uppercase tracking-wide block mb-1">
-                              Monto (Bs.)
+                              Monto
                             </label>
-                            <input
-                              type="number"
-                              value={editAmount}
-                              onChange={(e) => {
-                                setEditAmount(e.target.value);
-                                if (editErrors.amount)
-                                  setEditErrors((er) => ({ ...er, amount: undefined }));
-                              }}
-                              min="0.01"
-                              step="0.01"
-                              className={`w-full bg-white/10 border rounded-xl px-4 py-2 text-white focus:outline-none transition-colors text-sm ${
-                                editErrors.amount
-                                  ? 'border-red-400/70 focus:border-red-400'
-                                  : 'border-white/20 focus:border-indigo-400'
-                              }`}
-                            />
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                value={editAmount}
+                                onChange={(e) => {
+                                  setEditAmount(e.target.value);
+                                  if (editErrors.amount)
+                                    setEditErrors((er) => ({ ...er, amount: undefined }));
+                                }}
+                                min="0.01"
+                                step="0.01"
+                                className={`min-w-0 flex-1 bg-white/10 border rounded-xl px-4 py-2 text-white focus:outline-none transition-colors text-sm ${
+                                  editErrors.amount
+                                    ? 'border-red-400/70 focus:border-red-400'
+                                    : 'border-white/20 focus:border-indigo-400'
+                                }`}
+                              />
+                              <select
+                                value={editCurrency}
+                                onChange={(e) => {
+                                  if (isCurrency(e.target.value)) setEditCurrency(e.target.value);
+                                  if (editErrors.currency)
+                                    setEditErrors((er) => ({ ...er, currency: undefined }));
+                                }}
+                                className={`w-[6.5rem] shrink-0 bg-gray-900 border rounded-xl px-2 py-2 text-white focus:outline-none transition-colors text-sm appearance-none ${
+                                  editErrors.currency
+                                    ? 'border-red-400/70 focus:border-red-400'
+                                    : 'border-white/20 focus:border-indigo-400'
+                                }`}
+                                aria-label="Moneda"
+                              >
+                                {CURRENCIES.map((code) => (
+                                  <option key={code} value={code} className="bg-gray-900">
+                                    {code} ({CURRENCY_SYMBOLS[code]})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                             {editErrors.amount && (
                               <p className="text-red-400 text-xs mt-1">⚠ {editErrors.amount}</p>
+                            )}
+                            {editErrors.currency && (
+                              <p className="text-red-400 text-xs mt-1">⚠ {editErrors.currency}</p>
                             )}
                           </div>
                           <div>
@@ -397,7 +439,7 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
                           <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-2 text-xs text-indigo-300">
                             Cada participante pagaría{' '}
                             <span className="font-semibold">
-                              Bs. {(parseFloat(editAmount) / editSelected.length).toFixed(2)}
+                              {formatMoney(parseFloat(editAmount) / editSelected.length, editCurrency)}
                             </span>{' '}
                             ({editSelected.length} persona{editSelected.length !== 1 ? 's' : ''})
                           </div>
@@ -426,10 +468,25 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
               })}
             </ul>
 
-            {/* Total al pie */}
-            <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-sm">
-              <span className="text-white/40">Total registrado</span>
-              <span className="text-white font-bold">Bs. {formatAmount(totalAmount)}</span>
+            {/* Totales por moneda (no se mezclan hasta la conversión a USD) */}
+            <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+              <div className="flex items-start justify-between text-sm gap-3">
+                <span className="text-white/40">
+                  {hasMixedCurrencies ? 'Totales por moneda' : 'Total registrado'}
+                </span>
+                <div className="text-right space-y-0.5">
+                  {currenciesWithTotal.map((code) => (
+                    <div key={code} className="text-white font-bold">
+                      {formatMoney(totalsByCurrency[code], code)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {hasMixedCurrencies && (
+                <p className="text-white/30 text-xs">
+                  El total unificado y los balances en USD se visualizan en la pestaña Saldos.
+                </p>
+              )}
             </div>
           </>
         )}
@@ -454,7 +511,9 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
               {expense && (
                 <div className="bg-white/5 rounded-xl px-4 py-3 my-3">
                   <p className="text-white text-sm font-semibold truncate">{expense.description}</p>
-                  <p className="text-indigo-300 text-xs mt-0.5">Bs. {formatAmount(expense.amount)}</p>
+                  <p className="text-indigo-300 text-xs mt-0.5">
+                    {formatMoney(expense.amount, expense.currency)}
+                  </p>
                 </div>
               )}
 

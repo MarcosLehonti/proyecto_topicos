@@ -1,69 +1,74 @@
-import type { Expense, Participant, PaymentRecord, Debt } from '../models';
+import type { Expense, Participant, PaymentRecord, Debt, ExchangeRates } from '../models';
+import { toUsdCents } from './currency';
 
 /**
- * Convierte bolivianos a centavos enteros redondeando al centavo más cercano.
- * Toda la aritmética interna opera en centavos para evitar errores de punto flotante.
+ * Distribuye `usdCents` entre los participantes de forma exacta y determinista.
+ *
+ *   - base = floor(usdCents / n)
+ *   - remainder = usdCents % n
+ *   - cada id en participantIds asume `base`.
+ *   - `remainder` siempre se le asume al que pagó (`paidBy`).
+ *   - La suma total de partes === usdCents.
+ * Retorna un Map con lo que le corresponde a cada participante.
  */
-function toCents(bolivianos: number): number {
-  return Math.round(bolivianos * 100);
-}
+function distributeSharesForPayer(
+  usdCents: number,
+  participantIds: string[],
+  paidBy: string
+): Map<string, number> {
+  const n = participantIds.length;
+  const base = Math.floor(usdCents / n);
+  const remainder = usdCents % n;
 
-/**
- * Distribuye `amountCents` entre `n` participantes de forma exacta y determinista.
- *
- * Usa el método del resto mayor (largest remainder):
- *   - base = floor(amountCents / n)
- *   - remainder = amountCents mod n
- *   - Los primeros `remainder` participantes reciben base + 1 centavo.
- *   - El resto recibe base centavos.
- *
- * Garantía: sum(resultado) === amountCents, siempre.
- *
- * Ejemplo: distributeShares(100, 3) → [34, 33, 33]  (suma = 100) ✓
- * Ejemplo: distributeShares(1000, 6) → [167, 167, 167, 167, 166, 166] (suma = 1000) ✓
- */
-function distributeShares(amountCents: number, n: number): number[] {
-  const base = Math.floor(amountCents / n);
-  const remainder = amountCents - base * n;
-  return Array.from({ length: n }, (_, i) => base + (i < remainder ? 1 : 0));
+  const shares = new Map<string, number>();
+  
+  // Asignar base a todos los que comparten
+  for (const id of participantIds) {
+    shares.set(id, base);
+  }
+
+  // Sumar el remanente al que pagó
+  shares.set(paidBy, (shares.get(paidBy) ?? 0) + remainder);
+
+  return shares;
 }
 
 /**
  * Calcula el balance neto por participante.
- * Opera íntegramente en centavos; convierte a bolivianos al retornar.
+ * Opera íntegramente en centavos USD; convierte a dólares al retornar.
  *
- * Retorna: participantId → balance en Bs. (positivo: le deben, negativo: debe)
+ * Retorna: participantId → balance en USD (positivo: le deben, negativo: debe)
  * Garantía: Σ balances = 0 exactamente.
  */
 export function calculateBalances(
   expenses: Expense[],
-  participants: Participant[]
+  participants: Participant[],
+  exchangeRates: ExchangeRates
 ): Map<string, number> {
   const cents = new Map<string, number>();
   participants.forEach((p) => cents.set(p.id, 0));
 
   expenses.forEach((expense) => {
-    const amountCents = toCents(expense.amount);
-    const n = expense.participants.length;
-    const shares = distributeShares(amountCents, n);
+    const usdCents = toUsdCents(expense.amount, expense.currency, exchangeRates);
+    const shares = distributeSharesForPayer(usdCents, expense.participants, expense.paidBy);
 
     // Acreditar al pagador el total exacto
-    cents.set(expense.paidBy, (cents.get(expense.paidBy) ?? 0) + amountCents);
+    cents.set(expense.paidBy, (cents.get(expense.paidBy) ?? 0) + usdCents);
 
     // Debitar a cada participante su parte exacta (posiblemente distinta en 1 centavo)
-    expense.participants.forEach((participantId, idx) => {
-      cents.set(participantId, (cents.get(participantId) ?? 0) - shares[idx]);
+    shares.forEach((share, participantId) => {
+      cents.set(participantId, (cents.get(participantId) ?? 0) - share);
     });
   });
 
-  // Convertir centavos → bolivianos al final (una única división, sin acumulación de error)
+  // Convertir centavos USD → dólares al final (una única división, sin acumulación de error)
   const result = new Map<string, number>();
   cents.forEach((c, id) => result.set(id, c / 100));
   return result;
 }
 
 /**
- * Resultado detallado de saldo por participante (valores en bolivianos)
+ * Resultado detallado de saldo por participante (valores en dólares)
  */
 export interface ParticipantBalance {
   totalPaid: number;       // Suma pagada como pagador de gastos
@@ -75,9 +80,10 @@ export interface ParticipantBalance {
 }
 
 /**
- * Calcula el desglose completo de saldos usando aritmética entera (centavos).
+ * Calcula el desglose completo de saldos usando aritmética entera (centavos de USD).
  *
- * Si se pasan `paidTransfers`, los aplica como ajuste sobre el balance:
+ * Si se pasan `paidTransfers`, los aplica como ajuste sobre el balance.
+ * PaymentRecord.amountCents pasa a interpretarse como centavos USD a partir de ahora.
  *   - Para el deudor (from): adjustedBalance += amountCents   (pagó, reduce su deuda)
  *   - Para el acreedor (to): adjustedBalance -= amountCents   (recibió, reduce su crédito)
  *
@@ -89,9 +95,10 @@ export interface ParticipantBalance {
 export function calculateDetailedBalances(
   expenses: Expense[],
   participants: Participant[],
+  exchangeRates: ExchangeRates,
   paidTransfers?: PaymentRecord[]
 ): Map<string, ParticipantBalance> {
-  // Acumuladores en centavos durante todo el cálculo
+  // Acumuladores en centavos USD durante todo el cálculo
   const paidCents     = new Map<string, number>();
   const owedCents     = new Map<string, number>();
   const settledOutC   = new Map<string, number>();
@@ -104,16 +111,15 @@ export function calculateDetailedBalances(
   });
 
   expenses.forEach((expense) => {
-    const amountCents = toCents(expense.amount);
-    const n = expense.participants.length;
-    const shares = distributeShares(amountCents, n);
+    const usdCents = toUsdCents(expense.amount, expense.currency, exchangeRates);
+    const shares = distributeSharesForPayer(usdCents, expense.participants, expense.paidBy);
 
     // Acreditar al pagador
-    paidCents.set(expense.paidBy, (paidCents.get(expense.paidBy) ?? 0) + amountCents);
+    paidCents.set(expense.paidBy, (paidCents.get(expense.paidBy) ?? 0) + usdCents);
 
     // Debitar a cada participante su parte exacta
-    expense.participants.forEach((participantId, idx) => {
-      owedCents.set(participantId, (owedCents.get(participantId) ?? 0) + shares[idx]);
+    shares.forEach((share, participantId) => {
+      owedCents.set(participantId, (owedCents.get(participantId) ?? 0) + share);
     });
   });
 
@@ -125,7 +131,7 @@ export function calculateDetailedBalances(
     });
   }
 
-  // Convertir centavos → bolivianos al final y calcular balances
+  // Convertir centavos USD → dólares al final y calcular balances
   const result = new Map<string, ParticipantBalance>();
   participants.forEach((p) => {
     const paid    = paidCents.get(p.id)   ?? 0;
@@ -154,9 +160,10 @@ export function calculateDetailedBalances(
 export function calculateDebts(
   expenses: Expense[],
   participants: Participant[],
+  exchangeRates: ExchangeRates,
   payments?: PaymentRecord[]
 ): Debt[] {
-  const detailed = calculateDetailedBalances(expenses, participants, payments);
+  const detailed = calculateDetailedBalances(expenses, participants, exchangeRates, payments);
   const debts: Debt[] = [];
 
   // Ordenar de mayor a menor para minimizar el número de transferencias

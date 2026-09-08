@@ -1,3 +1,10 @@
+export type Currency = 'USD' | 'USDT' | 'BOB';
+
+export interface ExchangeRates {
+  usdToBob: number;    // cuántos bolivianos es 1 USD
+  usdToUsdt: number;   // cuántos USDT es 1 USD
+}
+
 // Modelo principal: representa un participante del viaje
 export interface Participant {
   id: string;
@@ -9,7 +16,8 @@ export interface Participant {
 export interface Expense {
   id: string;
   description: string;
-  amount: number;           // Monto total del gasto
+  amount: number;           // Monto total del gasto (en su moneda original)
+  currency: Currency;       // Moneda original en la que se registró el gasto
   paidBy: string;           // ID del participante que pagó
   participants: string[];   // IDs de los participantes que comparten el gasto
   date: string;
@@ -26,12 +34,16 @@ export interface Debt {
 /**
  * Registro de una transferencia ya realizada.
  * Se identifica por (from, to, amountCents) para comparación exacta.
- * amountCents = Math.round(amount * 100)
+ * amountCents = Math.round(amount * 100) en USD.
+ * currency: Moneda real en la que se pagó la transferencia.
+ * paidAmount: Monto registrado en esa moneda al momento del pago.
  */
 export interface PaymentRecord {
   from: string;          // ID del deudor que realizó el pago
   to: string;            // ID del acreedor que recibió el pago
-  amountCents: number;   // Monto en centavos (para comparación exacta sin punto flotante)
+  amountCents: number;   // Monto en centavos USD de la deuda cancelada
+  currency: Currency;    // Moneda real en la que se realizó el pago (USD, USDT, BOB)
+  paidAmount: number;    // Monto entregado en esa moneda
   paidAt: string;        // ISO timestamp del momento en que se marcó como pagado
 }
 
@@ -40,4 +52,5 @@ export interface AppState {
   participants: Participant[];
   expenses: Expense[];
   payments: PaymentRecord[];   // Transferencias de liquidación ya realizadas
+  exchangeRates: ExchangeRates;
 }
