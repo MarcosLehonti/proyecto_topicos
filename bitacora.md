@@ -1448,3 +1448,73 @@ Ninguno.
 ### Correcciones realizadas
 
 Ninguna.
+
+---
+
+## Iteración 17 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y plan-alumnos-multimoneda.md (secciones 2, 3.1, 3.3 y 3.5). Revisa SettlementPanel.tsx, calculations.ts (calculateDebts) y currency.ts dejados por los alumnos 1 y 2.
+>
+> Eres el Alumno 3. Implementa SOLO esta parte. No agregues todavía el selector "¿en qué moneda estás pagando?" al marcar una transferencia (eso es Alumno 4). No toques la regla matemática del excedente ni la conversión a USD salvo que esté rota de forma evidente; si está rota, corrígela y documéntalo.
+>
+> Objetivo de esta iteración:
+> La pestaña Liquidación debe mostrar cada transferencia principalmente en dólares americanos, y también el equivalente en USDT y en bolivianos, usando las tasas actuales.
+>
+> Requisitos:
+>
+> 1. Cada transferencia pendiente (salida de calculateDebts, que ya está en USD) se muestra así:
+>    - Línea principal: Deudor → Acreedor y monto en USD (ejemplo: "Diego → Ana    $ 40.00")
+>    - Debajo o al lado, texto secundario más pequeño: equivalente USDT y equivalente Bs., por ejemplo:
+>      USDT 40.00    ·    Bs. 278.40
+>    - Los equivalentes se calculan con fromUsdCents (o la función equivalente) y state.exchangeRates
+>    - Si cambias las tasas en la UI, los equivalentes de liquidación deben actualizarse al re-render
+>
+> 2. El total pendiente a transferir también se muestra primero en USD y, en secundario, USDT y BOB.
+>
+> 3. Las transferencias ya completadas (lista histórica de payments) deben mostrar igual: principal USD, secundario USDT y BOB. amountCents se interpreta como centavos USD (decisión del Alumno 2).
+>
+> 4. Conserva: marcar ○ / desmarcar ✓, estado "¡Liquidación completa!", pendientes vs completadas, estados vacíos claros.
+>
+> 5. No mezcles unidades. Nunca muestres el monto principal de liquidación como "Bs." si el cálculo ya está en USD.
+>
+> 6. Responsive: en móvil los equivalentes pueden ir en una segunda fila; en desktop pueden ir a la derecha bajo el monto USD. Mantén el look actual (dark, glass, badges).
+>
+> 7. Compila con tsc --noEmit. Prueba:
+>    - Varios gastos mixtos (USD + BOB + USDT) generan transferencias en USD
+>    - Con usdToBob = 6.96, $10 se ve también como Bs. 69.60 y USDT 10.00 (si usdToUsdt = 1)
+>    - Cambiar usdToBob a 7.00 actualiza los equivalentes Bs. sin cambiar el USD principal
+>    - Marcar y desmarcar una transferencia sigue funcionando
+>    - Σ de equivalentes no necesita ser "mágica": la verdad contable es el USD; BOB/USDT son conversión de visualización
+>
+> 8. Registra Iteración 17 en bitacora.md con el prompt textual y lo que realmente implementaste. No borres entradas anteriores. No adelantes el registro de moneda de pago.
+
+### Cambios realizados
+
+**`src/views/components/SettlementPanel.tsx`**
+- Se importó `fromUsdCents` de `../../services/currency`.
+- **Transferencias pendientes y completadas (`TransferRow`)**:
+  - Se modificó la presentación del monto en cada fila para mostrar como línea principal el monto en **USD** (`$ {formatAmount(cents / 100)}`).
+  - Justo debajo, en texto secundario (`text-xs text-white/40` o tachado con `text-white/20` si ya fue pagado), se calculan y muestran los equivalentes en **USDT** y **BOB** (`USDT {formatAmount(usdtVal)} · Bs. {formatAmount(bobVal)}`), utilizando la función pura `fromUsdCents` y las tasas vigentes `exchangeRates`.
+- **Total pendiente a transferir**:
+  - Se actualizó para presentar como valor principal el monto en USD (`$ {formatAmount(pendingCents / 100)}`), y como valor secundario sus equivalentes: `USDT ... · Bs. ...`.
+- **Total liquidado (transferencias completadas)**:
+  - Se actualizó con la misma estructura consistente: valor principal en USD (`$ {formatAmount(paidCents / 100)}`) y línea secundaria con equivalentes en USDT y Bs.
+- Se conservaron intactas las funciones de marcar/desmarcar transferencias, los estados vacíos, las confirmaciones visuales y la vista "¡Liquidación completa!".
+- No se adelantó el selector de moneda para pagos (reservado para el Alumno 4).
+
+### Resultado
+
+- `npx tsc --noEmit` compila con código de salida 0 sin ningún error.
+- `npm run build` construye los artefactos de producción exitosamente.
+- La liquidación muestra montos principales en USD y equivalentes dinámicos en USDT y BOB que reaccionan inmediatamente ante cualquier cambio en el panel de tipos de cambio (`ExchangeRatesPanel`).
+
+### Problemas encontrados
+
+Ninguno.
+
+### Correcciones realizadas
+
+Ninguna.
+
