@@ -5,9 +5,9 @@ Cuentas Claras es una aplicación web para dividir gastos de viaje de manera sen
 ## 🚀 Características
 
 - **Gestión de Participantes**: Agrega y elimina participantes del viaje.
-- **Registro de Gastos**: Añade gastos indicando quién pagó y cómo se divide (por partes iguales).
-- **Cálculo de Saldos**: Visualiza cuánto debe cada persona o cuánto le deben.
-- **Liquidación**: Genera automáticamente los pagos necesarios para saldar las deudas de todos los participantes con el menor número de transacciones posibles.
+- **Registro de Gastos**: Añade gastos en Dólares (USD), USDT o Bolivianos (BOB), indicando quién pagó y entre quiénes se divide.
+- **Cálculo de Saldos en USD**: Visualiza balances consolidados en dólares (USD) garantizando suma cero con absorción de centavos por el pagador.
+- **Liquidación Multimoneda**: Muestra transferencias óptimas en USD con equivalentes en USDT y BOB, registrando la moneda real en la que se pagó cada liquidación.
 
 ## 🏗️ Estructura del Código
 

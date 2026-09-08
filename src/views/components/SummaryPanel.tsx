@@ -86,7 +86,7 @@ export function SummaryPanel({ expenses, participants, payments, exchangeRates }
         <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2.5 mb-4">
           <span className="text-emerald-400 text-sm">💰</span>
           <span className="text-emerald-300 text-xs">
-            Balances actualizados con los pagos de liquidación ya realizados.
+            Balances actualizados en USD con las liquidaciones realizadas (los pagos se descuentan en USD independientemente de si se entregaron en Bs., USD o USDT).
           </span>
         </div>
       )}

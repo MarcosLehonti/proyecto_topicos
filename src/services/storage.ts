@@ -1,4 +1,4 @@
-import type { AppState, Currency, Expense, ExchangeRates } from '../models';
+import type { AppState, Currency, Expense, ExchangeRates, PaymentRecord } from '../models';
 
 const STORAGE_KEY = 'cuentas_claras_data_v3';
 
@@ -14,6 +14,15 @@ function hydrateExpense(raw: Expense & { currency?: Currency }): Expense {
   return {
     ...raw,
     currency: raw.currency ?? 'BOB',
+  };
+}
+
+/** Pagos antiguos (sin currency o paidAmount) se hidratan como USD y paidAmount = amountCents/100. */
+function hydratePayment(raw: PaymentRecord & { currency?: Currency; paidAmount?: number }): PaymentRecord {
+  return {
+    ...raw,
+    currency: raw.currency ?? 'USD',
+    paidAmount: raw.paidAmount ?? raw.amountCents / 100,
   };
 }
 
@@ -36,6 +45,7 @@ export function loadState(): AppState {
     return {
       ...merged,
       expenses: (merged.expenses ?? []).map(hydrateExpense),
+      payments: (merged.payments ?? []).map(hydratePayment),
       exchangeRates: hydrateExchangeRates(merged.exchangeRates),
     };
   } catch {

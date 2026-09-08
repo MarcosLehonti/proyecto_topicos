@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import type { AppState, Currency, Expense, ExchangeRates, Participant, PaymentRecord } from '../models';
 import { loadState, saveState } from '../services/storage';
 import { generateId } from '../services/calculations';
-import { isCurrency } from '../services/currency';
+import { isCurrency, fromUsdCents } from '../services/currency';
 
 /**
  * Controller principal de la aplicación.
@@ -226,19 +226,24 @@ export function useAppController() {
   /**
    * Marca una transferencia de liquidación como ya realizada.
    * Se identifica por (from, to, amountCents) para comparación exacta.
+   * Calcula paidAmount según la moneda elegida y las tasas vigentes.
    * Si ya estaba marcada, no hace nada.
    */
   const markTransferPaid = useCallback(
-    (from: string, to: string, amountCents: number) => {
+    (from: string, to: string, amountCents: number, currency: Currency) => {
       const alreadyPaid = state.payments.some(
         (p) => p.from === from && p.to === to && p.amountCents === amountCents
       );
       if (alreadyPaid) return;
 
+      const paidAmount = fromUsdCents(amountCents, currency, state.exchangeRates);
+
       const record: PaymentRecord = {
         from,
         to,
         amountCents,
+        currency,
+        paidAmount,
         paidAt: new Date().toISOString(),
       };
       updateState({ ...state, payments: [...state.payments, record] });

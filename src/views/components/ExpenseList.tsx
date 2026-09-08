@@ -484,7 +484,7 @@ export function ExpenseList({ expenses, participants, onRemove, onUpdate }: Prop
               </div>
               {hasMixedCurrencies && (
                 <p className="text-white/30 text-xs">
-                  El total unificado en USD llegará en la siguiente iteración.
+                  El total unificado y los balances en USD se visualizan en la pestaña Saldos.
                 </p>
               )}
             </div>

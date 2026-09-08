@@ -1518,3 +1518,113 @@ Ninguno.
 
 Ninguna.
 
+---
+
+## Iteración 18 — 2026-09-08
+
+### Prompt recibido
+
+> Lee bitacora.md y plan-alumnos-multimoneda.md completo (especialmente 2, 3.5 y el resultado final). Revisa models, useAppController (markTransferPaid / unmarkTransferPaid), SettlementPanel y SummaryPanel.
+>
+> Eres el Alumno 4. Cierra la funcionalidad. No reescribas de cero los cálculos si ya cumplen USD + excedente al pagador. Sí debes integrar y pulir para que las 4 pestañas sean coherentes.
+>
+> Objetivo de esta iteración:
+> Al marcar una transferencia como pagada, el usuario elige si pagó en dólares americanos, USDT o bolivianos. Esa moneda (y el monto equivalente en esa moneda) queda registrada y se ve en el historial. Los saldos siguen actualizándose automáticamente.
+>
+> Requisitos:
+>
+> 1. Extiende PaymentRecord en src/models/index.ts:
+>    - currency: Currency        // moneda REAL en la que se pagó
+>    - paidAmount: number        // monto en esa moneda (el equivalente al momento de pagar)
+>    - Conserva from, to, amountCents (centavos USD de la deuda cancelada), paidAt
+>    - Datos viejos sin currency: al hidratar, usa currency: 'USD' y paidAmount = amountCents/100 (spread defensivo en storage)
+>
+> 2. Controller:
+>    - markTransferPaid(from, to, amountCents, currency) debe:
+>      * calcular paidAmount con las tasas actuales (fromUsdCents)
+>      * guardar currency, paidAmount, amountCents, paidAt
+>      * no duplicar la misma firma (from, to, amountCents) si ya existe
+>    - unmarkTransferPaid sigue identificando por (from, to, amountCents)
+>    - Si hay un "Revertir pagos", también debe seguir funcionando
+>
+> 3. SettlementPanel:
+>    - Al hacer click en ○ (pendiente) NO se marque en silencio: mostrar un mini-paso para elegir moneda USD / USDT / BOB
+>      (modal, popover o botones inline; elige lo más simple y consistente con el diálogo de borrar gasto)
+>    - Mostrar el equivalente que se va a registrar, según la moneda elegida, antes de confirmar
+>    - Tras confirmar, la fila pasa a completadas
+>    - En transferencias completadas, además del USD principal y los equivalentes, mostrar claramente:
+>      "Pagado en USDT 40.00" / "Pagado en Bs. 278.40" / "Pagado en $ 40.00"
+>      según currency y paidAmount guardados (no recalcular con tasas nuevas: el historial es lo que se pagó ese día)
+>    - El USD principal de la deuda sí es amountCents (lo que se descontó del saldo)
+>
+> 4. Saldos:
+>    - Deben seguir usando amountCents en USD para el adjustedBalance (como dejó el Alumno 2)
+>    - Si es natural, un texto breve de que los pagos de liquidación se descuentan en USD aunque se hayan entregado en Bs. o USDT
+>
+> 5. Mensajes claros, sin jerga técnica:
+>    - Si intenta marcar sin elegir moneda → "Elige la moneda en la que se realizó el pago."
+>    - Estados vacíos existentes se conservan
+>
+> 6. Recorre las 4 pestañas y corrige inconsistencias de etiquetas (si alguna vista todavía dice Bs. como unidad principal de saldos/liquidación, cámbiala a USD). Los gastos individuales SÍ deben seguir mostrando su moneda original.
+>
+> 7. Compila con tsc --noEmit. Prueba de punta a punta:
+>    - Gastos mixtos USD + USDT + BOB
+>    - Saldos en USD, suma 0
+>    - Liquidación principal en USD con equivalentes USDT y Bs.
+>    - Marcar pago en BOB: historial dice pagado en Bs. XXX; el saldo del deudor baja en USD
+>    - Marcar otro pago en USDT y otro en USD
+>    - Si todos pagan, "¡Liquidación completa!"
+>    - Refrescar la página: monedas de pago persisten
+>    - Revertir un pago lo quita del historial y el saldo vuelve a adeudarse
+>    - Centavos: $10 / 3, el pagador absorbe 0.01
+>
+> 8. Opcional breve: actualiza README.md (2-4 líneas) indicando las tres monedas, que los saldos son en USD y que se registra la moneda del pago. No reescribas el README entero.
+>
+> 9. Registra Iteración 18 en bitacora.md con el prompt textual y el resultado real. Esta es la iteración que cierra el pedido de multimoneda. No borres entradas anteriores. No inventes problemas.
+
+### Cambios realizados
+
+**`src/models/index.ts`**
+- Se extendió `PaymentRecord` agregando:
+  - `currency: Currency`: la moneda real en la que se liquidó la deuda (USD, USDT o BOB).
+  - `paidAmount: number`: el monto exacto entregado en dicha moneda.
+
+**`src/services/storage.ts`**
+- Se agregó la función `hydratePayment` para que datos guardados previamente sin moneda se hidraten defensivamente con `currency: 'USD'` y `paidAmount = amountCents / 100`.
+- Se integró `hydratePayment` dentro de `loadState`.
+
+**`src/controllers/useAppController.ts`**
+- `markTransferPaid` ahora recibe `(from, to, amountCents, currency: Currency)`.
+- Calcula `paidAmount` en el momento del pago con `fromUsdCents(amountCents, currency, state.exchangeRates)`.
+- Almacena el registro completo en `state.payments` evitando duplicados exactos.
+- `unmarkTransferPaid` conserva la identificación por `(from, to, amountCents)`.
+
+**`src/views/components/SettlementPanel.tsx`**
+- Al hacer clic en `○` (pendiente), se abre un modal de confirmación consistente con el diseño de la aplicación.
+- El usuario selecciona la moneda de pago (USD, USDT o BOB) con visualización de equivalencia antes de confirmar.
+- Valida la selección mostrando el mensaje: `"Elige la moneda en la que se realizó el pago."` si no se ha elegido ninguna.
+- En la lista de transferencias completadas, se muestra como badge destacado la leyenda `"Pagado en USDT 40.00"`, `"Pagado en Bs. 278.40"` o `"Pagado en $ 40.00"` según los datos persistidos en el registro, manteniendo el USD principal como base contable.
+
+**`src/views/components/SummaryPanel.tsx`**
+- Se clarificó en el banner informativo que los pagos de liquidación se descuentan en USD independientemente de si se entregaron físicamente en Bs., USD o USDT.
+
+**`src/views/components/ExpenseList.tsx`**
+- Se actualizó la nota informativa al pie de totales mixtos indicando que el total consolidado y los balances en USD se visualizan en la pestaña Saldos.
+
+**`README.md`**
+- Se agregaron las características multimoneda (USD, USDT, BOB), balances en USD y registro de moneda de pago.
+
+### Resultado
+
+- `npx tsc --noEmit` y `npm run build` ejecutados exitosamente con 0 errores de tipos y empaquetado de producción limpio.
+- El flujo de punta a punta permite registrar gastos en cualquier divisa, calcular saldos garantizando suma cero en USD, liquidar eligiendo la divisa entregada y conservar el historial con persistencia en `localStorage`.
+
+### Problemas encontrados
+
+- Al compilar inicialmente tras modificar `storage.ts`, faltaba incluir el tipo `PaymentRecord` en los imports de dicho archivo.
+
+### Correcciones realizadas
+
+- Se importó `PaymentRecord` en `src/services/storage.ts`, logrando compilación limpia.
+
+

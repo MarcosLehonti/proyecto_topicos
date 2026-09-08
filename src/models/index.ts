@@ -34,12 +34,16 @@ export interface Debt {
 /**
  * Registro de una transferencia ya realizada.
  * Se identifica por (from, to, amountCents) para comparación exacta.
- * amountCents = Math.round(amount * 100)
+ * amountCents = Math.round(amount * 100) en USD.
+ * currency: Moneda real en la que se pagó la transferencia.
+ * paidAmount: Monto registrado en esa moneda al momento del pago.
  */
 export interface PaymentRecord {
   from: string;          // ID del deudor que realizó el pago
   to: string;            // ID del acreedor que recibió el pago
-  amountCents: number;   // Monto en centavos (para comparación exacta sin punto flotante)
+  amountCents: number;   // Monto en centavos USD de la deuda cancelada
+  currency: Currency;    // Moneda real en la que se realizó el pago (USD, USDT, BOB)
+  paidAmount: number;    // Monto entregado en esa moneda
   paidAt: string;        // ISO timestamp del momento en que se marcó como pagado
 }
 
